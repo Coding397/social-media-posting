@@ -27,7 +27,7 @@ Needs `requests` and `Pillow`.
 
 | Platform | Account | Credentials | Status |
 |---|---|---|---|
-| Mastodon | @sylvia on wandering.shop | Injected by the session proxy; no token needed | Token must have `write:media` and `write:statuses` scopes (see Open items) |
+| Mastodon | @sylvia on wandering.shop | Environment API credential (Bearer) on `wandering.shop`, injected by the proxy | Working: posted a photo with alt text successfully |
 | Bluesky | akasylvia.bsky.social | `BSKY_HANDLE`, `BSKY_APP_PASSWORD` env vars | Working: posted a photo with alt text successfully |
 
 Images are re-encoded as JPEG copies: 800px longest edge for Bluesky (its upload
@@ -37,34 +37,31 @@ drops EXIF metadata, including GPS location.
 Alt text limits: 1500 characters on Mastodon, 2000 on Bluesky. Caption limits:
 500 on Mastodon, 300 on Bluesky.
 
-## Open items
+## Mastodon token: what to know
 
-**Mastodon token scopes.** The original token was read-only: uploads failed with
-403 "This action is outside the authorized scopes". Sylvia then added
-`write:media` and `write:statuses` to her existing app on wandering.shop, which
-invalidated the old token (401 "The access token is invalid"). She is putting the
-new token in the environment settings (Network secrets / API credentials); a new
-session picks it up, a running one does not. One app and one token serve her only
-account, @sylvia, and will also serve Fear of Landing later.
+One app and one token on wandering.shop serve @sylvia (her only account), for
+both this repo and Fear of Landing (`Coding397/marketing`). The token needs
+`write:statuses` and `write:media`. It can't read statuses back (403 on
+`GET /api/v1/statuses/:id`); that's expected, not a fault. Don't change the
+scopes to fix it: changing scopes kills the token (see below).
 
-At the start of a session, check it before anything else:
+If posting breaks, check first:
 
 ```bash
 curl -sS https://wandering.shop/api/v1/accounts/verify_credentials
 ```
 
-A 200 with `"username":"sylvia"` means the token works. Still 401: the new token
-isn't in the environment yet. Still 403 on upload: the scopes are missing. Never
+- 200 with `"username":"sylvia"`: token is fine.
+- 401 "access token is invalid": the token is dead. Fix: on wandering.shop,
+  Preferences → Development → the app → **Regenerate** the access token, then
+  replace the Mastodon secret in the Social Media environment (header
+  `Authorization`, prefix `Bearer`, value = token only). It takes effect
+  immediately in running sessions; no new session needed.
+- 403 "outside the authorized scopes": a scope is missing on the app.
+
+Changing the app's scopes on 2026-10-30 invalidated the old token, and a token
+copied straight after the edit was also rejected; regenerating fixed it. Never
 ask Sylvia to paste a token into the chat.
-
-**Mastodon post still to do.** Bluesky was posted on 2026-10-30, Mastodon was not.
-Photo of a crow on a wooden chair next to a small sculpture; Sylvia needs to
-re-upload it (it is not stored in this repo). Use the same wording as Bluesky:
-
-- Caption: `Crow and Sculpture, performance art by Remington, 2026`
-- Alt text: `A crow perched on the back of a wooden chair next to a small sculpture.`
-- Run with `--platform mastodon`. Sylvia has approved this post; check with her
-  only if the wording changes.
 
 ## Deliberately not included
 
