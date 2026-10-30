@@ -27,8 +27,8 @@ Needs `requests` and `Pillow`.
 
 | Platform | Account | Credentials | Status |
 |---|---|---|---|
-| Mastodon | @sylvia on wandering.shop | Injected by the session proxy; no token needed | Login verified |
-| Bluesky | akasylvia.bsky.social | `BSKY_HANDLE`, `BSKY_APP_PASSWORD` env vars | Login verified |
+| Mastodon | @sylvia on wandering.shop | Injected by the session proxy; no token needed | Token must have `write:media` and `write:statuses` scopes (see Open items) |
+| Bluesky | akasylvia.bsky.social | `BSKY_HANDLE`, `BSKY_APP_PASSWORD` env vars | Working: posted a photo with alt text successfully |
 
 Images are re-encoded as JPEG copies: 800px longest edge for Bluesky (its upload
 limit is about 1 MB), 2000px for Mastodon. Originals are untouched. Re-encoding
@@ -36,6 +36,35 @@ drops EXIF metadata, including GPS location.
 
 Alt text limits: 1500 characters on Mastodon, 2000 on Bluesky. Caption limits:
 500 on Mastodon, 300 on Bluesky.
+
+## Open items
+
+**Mastodon token scopes.** The original token was read-only: uploads failed with
+403 "This action is outside the authorized scopes". Sylvia then added
+`write:media` and `write:statuses` to her existing app on wandering.shop, which
+invalidated the old token (401 "The access token is invalid"). She is putting the
+new token in the environment settings (Network secrets / API credentials); a new
+session picks it up, a running one does not. One app and one token serve her only
+account, @sylvia, and will also serve Fear of Landing later.
+
+At the start of a session, check it before anything else:
+
+```bash
+curl -sS https://wandering.shop/api/v1/accounts/verify_credentials
+```
+
+A 200 with `"username":"sylvia"` means the token works. Still 401: the new token
+isn't in the environment yet. Still 403 on upload: the scopes are missing. Never
+ask Sylvia to paste a token into the chat.
+
+**Mastodon post still to do.** Bluesky was posted on 2026-10-30, Mastodon was not.
+Photo of a crow on a wooden chair next to a small sculpture; Sylvia needs to
+re-upload it (it is not stored in this repo). Use the same wording as Bluesky:
+
+- Caption: `Crow and Sculpture, performance art by Remington, 2026`
+- Alt text: `A crow perched on the back of a wooden chair next to a small sculpture.`
+- Run with `--platform mastodon`. Sylvia has approved this post; check with her
+  only if the wording changes.
 
 ## Deliberately not included
 
