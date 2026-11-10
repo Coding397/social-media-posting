@@ -14,7 +14,7 @@ Usage:
       --image a.jpg --alt "Alt for a" \
       --image b.jpg --alt "Alt for b" [--platform mastodon] [--post]
 """
-import argparse, datetime, io, os, sys, time
+import argparse, datetime, io, os, re, sys, time
 import requests
 from PIL import Image, ImageOps
 
@@ -61,7 +61,27 @@ def post_mastodon(caption, items):
     return r.json()["url"]
 
 
-def post_bluesky(caption, items):
+def bluesky_reply_ref(link):
+    """Turn a bsky.app post link into the reply refs (root + parent) for a reply to it."""
+    m = re.match(r"https://bsky\.app/profile/([^/]+)/post/([^/?#]+)", link)
+    if not m:
+        sys.exit(f"--reply-to must be a bsky.app post link, got {link}")
+    actor, rkey = m.groups()
+    if not actor.startswith("did:"):
+        r = requests.get(f"{BSKY}/xrpc/com.atproto.identity.resolveHandle",
+                         params={"handle": actor}, timeout=30)
+        r.raise_for_status()
+        actor = r.json()["did"]
+    r = requests.get(f"{BSKY}/xrpc/com.atproto.repo.getRecord", timeout=30,
+                     params={"repo": actor, "collection": "app.bsky.feed.post", "rkey": rkey})
+    r.raise_for_status()
+    rec = r.json()
+    parent = {"uri": rec["uri"], "cid": rec["cid"]}
+    root = rec["value"].get("reply", {}).get("root", parent)  # parent may itself be a reply
+    return {"root": root, "parent": parent}
+
+
+def post_bluesky(caption, items, reply_to=None):
     s = requests.post(f"{BSKY}/xrpc/com.atproto.server.createSession", timeout=30,
                       json={"identifier": os.environ["BSKY_HANDLE"],
                             "password": os.environ["BSKY_APP_PASSWORD"]})
@@ -78,6 +98,8 @@ def post_bluesky(caption, items):
     record = {"$type": "app.bsky.feed.post", "text": caption,
               "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
               "embed": {"$type": "app.bsky.embed.images", "images": images}}
+    if reply_to:
+        record["reply"] = bluesky_reply_ref(reply_to)
     r = requests.post(f"{BSKY}/xrpc/com.atproto.repo.createRecord", timeout=60, headers=auth,
                       json={"repo": s["did"], "collection": "app.bsky.feed.post", "record": record})
     r.raise_for_status()
@@ -95,9 +117,12 @@ def main():
     p.add_argument("--alt", action="append", default=[])
     p.add_argument("--platform", action="append", choices=list(POSTERS),
                    help="repeat to pick platforms; default is all")
+    p.add_argument("--reply-to", help="bsky.app post link to reply to (Bluesky only)")
     p.add_argument("--post", action="store_true", help="actually post (default is dry run)")
     a = p.parse_args()
     platforms = a.platform or list(POSTERS)
+    if a.reply_to and platforms != ["bluesky"]:
+        sys.exit("--reply-to works with --platform bluesky only")
 
     if not 1 <= len(a.image) <= MAX_IMAGES:
         sys.exit(f"Need 1-{MAX_IMAGES} images, got {len(a.image)}")
@@ -127,7 +152,10 @@ def main():
         print("\nDry run. Add --post to publish.")
         return
     for plat in platforms:
-        print(f"{plat}: {POSTERS[plat](a.caption, prepared[plat])}")
+        if plat == "bluesky":
+            print(f"{plat}: {post_bluesky(a.caption, prepared[plat], a.reply_to)}")
+        else:
+            print(f"{plat}: {POSTERS[plat](a.caption, prepared[plat])}")
 
 
 if __name__ == "__main__":
