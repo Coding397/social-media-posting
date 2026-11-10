@@ -20,9 +20,11 @@ python3 post_photos.py --caption "CAPTION" \
 Omit `--post` for a dry run (resizes and prints what would be posted).
 `--platform mastodon` or `--platform bluesky` limits it to one; default is both.
 
-Threads (Bluesky only): add `--platform bluesky --reply-to <bsky.app post link>`.
-Reply to the latest post in the thread; the script finds the thread's first post
-itself.
+Threads: add `--platform bluesky --reply-to <bsky.app post link>` or
+`--platform mastodon --reply-to <wandering.shop post link>` (one platform per
+run, since the links differ). Reply to the latest post in the thread, so the
+posts stay in order. For a thread on both, run each platform separately and
+chain each one's own links.
 Needs `requests` and `Pillow`.
 
 4. Report the post URLs. Don't commit photos to this repo.

@@ -39,7 +39,13 @@ def prepare(path, edge, max_bytes):
     sys.exit(f"Could not get {path} under {max_bytes} bytes")
 
 
-def post_mastodon(caption, items):
+def post_mastodon(caption, items, reply_to=None):
+    status = {"status": caption, "visibility": "public"}
+    if reply_to:
+        m = re.match(r"https://wandering\.shop/@[^/]+/(\d+)$", reply_to)
+        if not m:
+            sys.exit(f"--reply-to must be a wandering.shop post link, got {reply_to}")
+        status["in_reply_to_id"] = m.group(1)
     ids = []
     for data, _size, alt in items:
         r = requests.post(f"{MASTODON}/api/v2/media",
@@ -56,7 +62,7 @@ def post_mastodon(caption, items):
                 sys.exit("Timed out waiting for Mastodon to process an image")
         ids.append(m["id"])
     r = requests.post(f"{MASTODON}/api/v1/statuses", timeout=60,
-                      data={"status": caption, "visibility": "public", "media_ids[]": ids})
+                      data={**status, "media_ids[]": ids})
     r.raise_for_status()
     return r.json()["url"]
 
@@ -117,12 +123,12 @@ def main():
     p.add_argument("--alt", action="append", default=[])
     p.add_argument("--platform", action="append", choices=list(POSTERS),
                    help="repeat to pick platforms; default is all")
-    p.add_argument("--reply-to", help="bsky.app post link to reply to (Bluesky only)")
+    p.add_argument("--reply-to", help="link to the post to reply to; needs a single --platform")
     p.add_argument("--post", action="store_true", help="actually post (default is dry run)")
     a = p.parse_args()
     platforms = a.platform or list(POSTERS)
-    if a.reply_to and platforms != ["bluesky"]:
-        sys.exit("--reply-to works with --platform bluesky only")
+    if a.reply_to and len(platforms) != 1:
+        sys.exit("--reply-to needs exactly one --platform (links differ per platform)")
 
     if not 1 <= len(a.image) <= MAX_IMAGES:
         sys.exit(f"Need 1-{MAX_IMAGES} images, got {len(a.image)}")
@@ -152,10 +158,7 @@ def main():
         print("\nDry run. Add --post to publish.")
         return
     for plat in platforms:
-        if plat == "bluesky":
-            print(f"{plat}: {post_bluesky(a.caption, prepared[plat], a.reply_to)}")
-        else:
-            print(f"{plat}: {POSTERS[plat](a.caption, prepared[plat])}")
+        print(f"{plat}: {POSTERS[plat](a.caption, prepared[plat], a.reply_to)}")
 
 
 if __name__ == "__main__":
